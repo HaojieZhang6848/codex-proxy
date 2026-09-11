@@ -1,0 +1,75 @@
+# codex-proxy configuration
+#
+# Three concepts live in this file:
+#
+#   upstreams  remote endpoints that speak the Responses API (url + api key)
+#   models     the models this proxy offers (model name + key the client sends)
+#   models.*.upstream / upstream_model
+#              the mapping from an offered model onto an upstream model
+#
+# ${VAR} and $VAR are expanded from the environment before the file is parsed,
+# so credentials can be kept outside of the file.
+
+server:
+  # The listener is IPv4 only. 0.0.0.0:8080 accepts connections from anywhere,
+  # 127.0.0.1:8080 only from this host.
+  listen: "0.0.0.0:8080"
+  read_header_timeout: 30s
+  idle_timeout: 120s
+  shutdown_timeout: 15s
+  # Answer GET /v1/models locally with the models configured below.
+  expose_models_endpoint: true
+  # Maximum request body size, in bytes. Prompts may embed images.
+  max_body_bytes: 268435456
+
+# How outbound requests reach the upstream.
+# An empty url means "use the system proxy": HTTP_PROXY, HTTPS_PROXY and
+# NO_PROXY. Set url to always use that proxy instead.
+proxy:
+  url: ""
+  # url: "http://127.0.0.1:7890"
+  # url: "socks5://127.0.0.1:1080"
+
+upstreams:
+  - name: openai
+    # The path of the base url is used as a prefix. A repeated leading "/v1"
+    # segment is collapsed, so both of these reach /v1/responses:
+    #   base_url: "https://api.openai.com"
+    #   base_url: "https://api.openai.com/v1"
+    base_url: "https://api.openai.com/v1"
+    api_key: "${OPENAI_API_KEY}"
+    # Optional. Defaults to the Authorization header with the Bearer scheme.
+    # auth_header: "api-key"    # Azure style
+    # auth_scheme: ""           # send the raw key, without a scheme
+    connect_timeout: 15s
+    # Generous: reasoning models may think for a while before the first byte.
+    response_header_timeout: 120s
+
+  # - name: azure
+  #   base_url: "https://my-resource.openai.azure.com"
+  #   api_key: "${AZURE_OPENAI_KEY}"
+  #   auth_header: "api-key"
+  #   auth_scheme: ""
+
+models:
+  # The map key is the model name this proxy offers to its clients.
+  gpt-5-codex:
+    # The credential the client must present.
+    key: "${CODEX_PROXY_KEY}"
+    # Which upstream to use.
+    upstream: openai
+    # The model name sent upstream. Defaults to the map key above.
+    upstream_model: "gpt-5-codex"
+
+  # A second name for the same upstream model, guarded by its own key:
+  # team-a-gpt-5-codex:
+  #   key: "${TEAM_A_KEY}"
+  #   upstream: openai
+  #   upstream_model: "gpt-5-codex"
+
+log:
+  level: info    # debug, info, warn or error
+  format: text   # text or json
+  # Empty writes to stdout: the systemd journal on Linux, the console when run
+  # by hand. A Windows service falls back to the Windows Event Log.
+  file: ""
