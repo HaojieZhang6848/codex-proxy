@@ -100,6 +100,7 @@ can be kept out of the file.
 | `upstreams[].api_key` | - | Credential sent upstream. |
 | `upstreams[].auth_header` | `Authorization` | Header carrying the key. |
 | `upstreams[].auth_scheme` | `Bearer` | Scheme prefix; empty sends the raw key (Azure `api-key`). |
+| `upstreams[].headers` | empty | Extra headers for this upstream; they override the incoming request's headers. |
 | `upstreams[].connect_timeout` | `15s` | TCP/TLS connect timeout. |
 | `upstreams[].response_header_timeout` | `120s` | Time to first byte from the upstream. |
 | `models.<name>.key` | - | Key the client must present for this model. |

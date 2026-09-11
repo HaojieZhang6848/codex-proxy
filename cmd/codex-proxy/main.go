@@ -38,7 +38,15 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
+// bootstrapLogger is used before the configuration (and with it the log level,
+// format and destination) is known: everything goes to stderr.
+func bootstrapLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+}
+
 func run(args []string) int {
+	logger := bootstrapLogger()
+
 	command := "run"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		command = args[0]
@@ -49,14 +57,18 @@ func run(args []string) int {
 	flags.SetOutput(os.Stderr)
 	configPath := flags.String("config", "", "path to the configuration file")
 	showVersion := flags.Bool("version", false, "print the build information and exit")
+	// Help is the output of the command line itself rather than a log record,
+	// so it is written to the flag set's stream. Everything diagnostic goes
+	// through the logger.
 	flags.Usage = func() {
-		fmt.Fprint(os.Stderr, usage)
+		fmt.Fprint(flags.Output(), usage)
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 	if *showVersion || command == "version" {
+		// Not a log record: the version is the output of the command.
 		fmt.Println("codex-proxy " + version.String())
 		return 0
 	}
@@ -70,54 +82,60 @@ func run(args []string) int {
 		flags.Usage()
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", command, usage)
+		logger.Error("unknown command", "command", command)
+		flags.Usage()
 		return 2
 	}
 }
 
 func validateConfig(configPath string) int {
+	logger := bootstrapLogger()
 	path, err := config.DiscoverPath(configPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "codex-proxy:", err)
+		logger.Error("cannot find the configuration", "error", err.Error())
 		return 1
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "codex-proxy:", err)
+		logger.Error("invalid configuration", "config", path, "error", err.Error())
 		return 1
 	}
 	for _, warning := range cfg.Warnings() {
-		fmt.Fprintln(os.Stderr, "warning:", warning)
+		logger.Warn("configuration warning", "config", path, "detail", warning)
 	}
-	fmt.Printf("%s is valid: %d upstream(s), %d model(s)\n", path, len(cfg.Upstreams), len(cfg.Models))
+	logger.Info("configuration is valid", "config", path,
+		"upstreams", len(cfg.Upstreams), "models", len(cfg.Models))
 	return 0
 }
 
 // serve loads the configuration and runs the proxy until ctx is cancelled.
 // fallback receives the logs when the configuration does not name a log file.
 func serve(ctx context.Context, configPath string, fallback io.Writer) int {
+	logger := bootstrapLogger()
+
 	path, err := config.DiscoverPath(configPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "codex-proxy:", err)
+		logger.Error("cannot find the configuration", "error", err.Error())
 		return 1
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "codex-proxy:", err)
+		logger.Error("invalid configuration", "config", path, "error", err.Error())
 		return 1
 	}
-	logger, closer, err := newLogger(cfg, fallback)
+	configured, closer, err := newLogger(cfg, fallback)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "codex-proxy:", err)
+		logger.Error("cannot set up logging", "error", err.Error())
 		return 1
 	}
 	if closer != nil {
 		defer closer.Close()
 	}
+	logger = configured
 
 	logger.Info("starting codex-proxy", "version", version.String(), "config", path)
 	for _, warning := range cfg.Warnings() {
-		logger.Warn(warning)
+		logger.Warn("configuration warning", "detail", warning)
 	}
 
 	srv, err := server.New(cfg, logger)

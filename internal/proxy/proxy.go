@@ -139,6 +139,7 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request) *requestInfo {
 		return fail(w, info, http.StatusInternalServerError, "internal_error", err.Error())
 	}
 	forwardHeaders(outReq.Header, r.Header)
+	applyUpstreamHeaders(outReq.Header, upstream)
 	if sendBody != nil {
 		outReq.ContentLength = int64(len(sendBody))
 	}
@@ -183,6 +184,14 @@ func clientKey(r *http.Request) string {
 		}
 	}
 	return ""
+}
+
+// applyUpstreamHeaders sets the headers configured for the upstream. They win
+// over the headers of the incoming request.
+func applyUpstreamHeaders(header http.Header, upstream *config.Upstream) {
+	for name, value := range upstream.Headers {
+		header.Set(name, value)
+	}
 }
 
 // setUpstreamAuth replaces the client credential with the upstream credential.

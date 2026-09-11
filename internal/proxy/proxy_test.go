@@ -275,3 +275,51 @@ func TestModelListEndpoint(t *testing.T) {
 		t.Fatalf("status = %d, want 401", badResp.StatusCode)
 	}
 }
+
+func TestUpstreamHeadersOverrideClientHeaders(t *testing.T) {
+	received := make(chan http.Header, 1)
+	upstream := newIPv4Server(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	cfg, err := config.Parse([]byte(fmt.Sprintf(`
+upstreams:
+  - name: up
+    base_url: %s
+    api_key: upstream-secret
+    headers:
+      x-opencode-session: codex-local-opencode-go
+      User-Agent: codex-opencode-go/1.0
+models:
+  local-model: {key: client-secret, upstream_model: remote-model}
+`, upstream.URL)))
+	if err != nil {
+		t.Fatalf("config.Parse: %v", err)
+	}
+	p, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	front := newIPv4Server(t, p)
+
+	req, _ := http.NewRequest(http.MethodPost, front.URL+"/v1/responses", strings.NewReader(`{"model":"local-model"}`))
+	req.Header.Set("Authorization", "Bearer client-secret")
+	req.Header.Set("User-Agent", "codex-cli/1.2.3")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	header := <-received
+	for name, want := range map[string]string{
+		"X-Opencode-Session": "codex-local-opencode-go",
+		"User-Agent":         "codex-opencode-go/1.0",
+		"Authorization":      "Bearer upstream-secret",
+	} {
+		if got := header.Get(name); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+}

@@ -4,8 +4,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -20,9 +20,10 @@ const windowsServiceName = "codex-proxy"
 // runServer runs as a Windows service when started by the Service Control
 // Manager, and in the foreground otherwise.
 func runServer(configPath string) int {
+	logger := bootstrapLogger()
 	isService, err := svc.IsWindowsService()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "codex-proxy:", err)
+		logger.Error("cannot detect the service environment", "error", err.Error())
 		return 1
 	}
 	if !isService {
@@ -31,9 +32,13 @@ func runServer(configPath string) int {
 		return serve(ctx, configPath, nil)
 	}
 
-	handler := &windowsServiceHandler{configPath: configPath, fallback: openEventLog()}
+	handler := &windowsServiceHandler{
+		configPath: configPath,
+		fallback:   openEventLog(),
+		logger:     logger,
+	}
 	if err := svc.Run(windowsServiceName, handler); err != nil {
-		fmt.Fprintln(os.Stderr, "codex-proxy:", err)
+		logger.Error("the service stopped with an error", "error", err.Error())
 		return 1
 	}
 	return handler.exitCode
@@ -42,6 +47,7 @@ func runServer(configPath string) int {
 type windowsServiceHandler struct {
 	configPath string
 	fallback   io.WriteCloser
+	logger     *slog.Logger
 	exitCode   int
 }
 

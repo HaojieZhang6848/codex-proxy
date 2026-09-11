@@ -41,6 +41,11 @@ upstreams:
     # Optional. Defaults to the Authorization header with the Bearer scheme.
     # auth_header: "api-key"    # Azure style
     # auth_scheme: ""           # send the raw key, without a scheme
+    # Extra headers sent with every request to this upstream. They override the
+    # headers of the incoming request, e.g. a fixed User-Agent.
+    # headers:
+    #   x-opencode-session: "codex-local-opencode-go"
+    #   User-Agent: "codex-opencode-go/1.0"
     connect_timeout: 15s
     # Generous: reasoning models may think for a while before the first byte.
     response_header_timeout: 120s

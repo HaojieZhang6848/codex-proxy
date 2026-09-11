@@ -91,6 +91,12 @@ type Upstream struct {
 	AuthHeader string `yaml:"auth_header"`
 	AuthScheme string `yaml:"auth_scheme"`
 
+	// Headers are sent with every request to this upstream and take precedence
+	// over the headers of the incoming request. Use it for upstream specific
+	// headers such as x-opencode-session or a fixed User-Agent. Credentials are
+	// controlled by api_key, auth_header and auth_scheme, not here.
+	Headers map[string]string `yaml:"headers"`
+
 	ConnectTimeout        Duration `yaml:"connect_timeout"`
 	ResponseHeaderTimeout Duration `yaml:"response_header_timeout"`
 }
@@ -324,6 +330,12 @@ func (c *Config) validate() error {
 		upstreamNames[up.Name] = true
 		if err := validateBaseURL(up); err != nil {
 			return fmt.Errorf("config: upstream %q: %w", up.Name, err)
+		}
+		for name, value := range up.Headers {
+			if strings.TrimSpace(name) == "" {
+				return fmt.Errorf("config: upstream %q: headers contains an empty header name", up.Name)
+			}
+			up.Headers[name] = value
 		}
 		if strings.TrimSpace(up.APIKey) == "" {
 			c.warnings = append(c.warnings, fmt.Sprintf(
