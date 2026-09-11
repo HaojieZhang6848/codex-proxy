@@ -1,0 +1,45 @@
+# Example: the opencode.ai zen gateway as the upstream.
+#
+#   deepseek-flash     -> opencode-go / deepseek-flash
+#   codex-auto-review  -> opencode-go / deepseek-flash
+#
+# Both names this proxy offers are mapped onto the same upstream model, which is
+# what a Codex client needs when it wants a specific model for auto review.
+#
+# The gateway expects the bearer token plus a session header and a fixed
+# User-Agent; both are attached by the upstream "headers" block, so clients do
+# not have to send them.
+server:
+  listen: "0.0.0.0:4455"
+
+proxy:
+  url: ""
+
+upstreams:
+  - name: opencode-go
+    base_url: "https://opencode.ai/zen/go/v1"
+    api_key: "${OPENCODE_GO_TOKEN}"
+    auth_header: "Authorization"
+    auth_scheme: "Bearer"
+    headers:
+      x-opencode-session: "codex-local-opencode-go"
+      User-Agent: "codex-opencode-go/1.0"
+    connect_timeout: 15s
+    response_header_timeout: 120s
+
+models:
+  # One key for both names: a Codex client sends the same bearer token whatever
+  # model it asks for, so a per model key would need two providers.
+  deepseek-flash:
+    key: "${CODEX_PROXY_KEY}"
+    upstream: opencode-go
+    upstream_model: deepseek-flash
+  codex-auto-review:
+    key: "${CODEX_PROXY_KEY}"
+    upstream: opencode-go
+    upstream_model: deepseek-flash
+
+log:
+  level: info
+  format: text
+  file: ""

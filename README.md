@@ -76,6 +76,10 @@ env_key = "CODEX_PROXY_KEY"
 wire_api = "responses"
 ```
 
+An annotated example for the opencode.ai zen gateway (two local model names
+mapped onto one upstream model, with gateway specific headers) lives in
+`deploy/examples/opencode-go.yaml`.
+
 ## Configuration
 
 `config.yaml` is looked up in this order: `-config`, `$CODEX_PROXY_CONFIG`,
